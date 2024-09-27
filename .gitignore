@@ -1,2 +1,4 @@
 data/
 venv/
+.DS_Store
+
