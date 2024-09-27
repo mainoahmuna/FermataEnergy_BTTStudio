@@ -10,6 +10,7 @@ from google.colab import drive
 import os
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 import metpy.calc as mpcalc # For calculating heat index.
 from metpy.units import units
@@ -48,6 +49,10 @@ class Utils():
         return pd.read_csv(PATH_INTERNAL + "/metadata_removed_lost_l_and_w.csv")
       except Exception as e:
         print(f"Failed to load metadata: {e}")
+
+    # Add process_time_features code to do numeric encoding for time 
+    
+
 
     # Combines the load and weather files that have the same building_id
     def match_l_and_w_from_building_id(self, building_id):
@@ -143,8 +148,25 @@ class Utils():
         return weather.rename(columns={"date_time":"timestamp"})
 
 # Common Timeseries Encoding Functions
-    
-    # encodes 
-    def load_to_fourier():
-        print("Load to Fourier happens here")
-    
+    # Fourier Encoding on the load.csv
+    def fourier_encoding(self, load):
+      load_usage = load['out.electricity.total.energy_consumption'].values
+      fourier_load = np.fft.fft(load_usage)
+      print(fourier_load)
+      # Get the corresponding frequencies (assuming uniform 15-minute intervals)
+      n = len(load_usage)
+      sample_interval = 15 * 60  # 15 minutes in seconds
+
+      frequencies = np.fft.fftfreq(n, d=sample_interval)
+      # Get the magnitude and phase of the Fourier transform
+      magnitude = np.abs(fourier_load)
+      phase = np.angle(fourier_load)
+
+      # Plot the magnitude spectrum (ignoring the negative frequencies)
+      plt.figure(figsize=(10, 6))
+      plt.plot(frequencies[:n // 2], magnitude[:n // 2])  # Only positive frequencies
+      plt.title("Fourier Transform - Magnitude Spectrum")
+      plt.xlabel("Frequency (Hz)")
+      plt.ylabel("Magnitude")
+      plt.grid(True)
+      plt.show()
