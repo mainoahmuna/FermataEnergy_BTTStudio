@@ -31,6 +31,7 @@ class Utils():
             except Exception as e:
                 print(f"Failed to mount drive: {e}")
 
+
     # metadata cleaning 
     def remove_lost_l_and_w_from_metadata(self):
         md_uncleaned = pd.read_csv(PATH_EXTERNAL + "/metadata.csv")
@@ -147,4 +148,18 @@ class Utils():
     # encodes 
     def load_to_fourier():
         print("Load to Fourier happens here")
+    
+
+"""
+Benchmark holds different benchmarking functions
+"""
+class Benchmark():
+    def __init__(self):
+        pass
+    
+    # Implement persistence forcast
+    
+    # Implement rolling average
+    
+    # implement simple linear regression
     
