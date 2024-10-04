@@ -23,6 +23,19 @@ The Utils class holds common functions that can be used in:
 class Utils():
     # assumes the path is a shortcut in your "MyDrive"
     def __init__(self, using_colab : True):
+        """
+        Initialize the Utils class.
+
+        Parameters
+        ----------
+        using_colab : bool
+            If true, attempt to mount Google Drive in Google Colab environment.
+            If false, currently does not support local files.
+
+        Returns
+        -------
+        None
+        """
         if using_colab == False:
             print("Currently does not support local files.")
         else:
@@ -34,6 +47,20 @@ class Utils():
 
     # metadata cleaning 
     def remove_lost_l_and_w_from_metadata(self):
+        """
+        Remove metadata entries for buildings that don't have associated data in the "building_data" folder.
+
+        The output file is saved in the "processed_data" folder within the Google Drive folder, and is named
+        "metadata_removed_lost_l_and_w.csv".
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+        """
         md_uncleaned = pd.read_csv(PATH_EXTERNAL + "/metadata.csv")
         BUILDING_DATA_PATH = PATH_EXTERNAL + "/building_data"
         existing_ids = set(map(int, os.listdir(BUILDING_DATA_PATH)))
@@ -45,13 +72,40 @@ class Utils():
             print(f"Failed to save metadata: {e}")
     
     def load_cleaned_metadata(self):
-      try:
-        return pd.read_csv(PATH_INTERNAL + "/metadata_removed_lost_l_and_w.csv")
-      except Exception as e:
-        print(f"Failed to load metadata: {e}")
+        """
+        Loads the cleaned metadata from the "processed_data" folder within the Google Drive folder.
+        
+        The cleaned metadata is the result of removing metadata entries for buildings that don't have associated data in the "building_data" folder.
+        
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        pd.DataFrame
+            The cleaned metadata
+        """
+        try:
+            return pd.read_csv(PATH_INTERNAL + "/metadata_removed_lost_l_and_w.csv")
+        except Exception as e:
+            print(f"Failed to load metadata: {e}")
 
     # Combines the load and weather files that have the same building_id
     def match_l_and_w_from_building_id(self, building_id):
+      """
+        Combines the load and weather files that have the same building_id.
+
+        Parameters
+        ----------
+        building_id : int
+            The building_id to match load and weather data for.
+
+        Returns
+        -------
+        pd.DataFrame or None
+            The merged DataFrame with load and weather data for the given building_id, or None if there is an error.
+      """
       # file paths for load.csv and weather.csv
       load_file = os.path.join(BUILDING_PATH, str(building_id), 'load.csv')
       weather_file = os.path.join(BUILDING_PATH,str(building_id), 'weather.csv')
@@ -111,6 +165,20 @@ class Utils():
     # Using a list of building ids, returns the merged load and weather in
     # a list
     def collect_w_and_l_matches(self, building_ids):
+        """
+        Using a list of building ids, returns the merged load and weather in
+        a dictionary of {building_id: merged_df}.
+
+        Parameters
+        ----------
+        building_ids : list
+            A list of building ids.
+
+        Returns
+        -------
+        dict
+            A dictionary of building ids to their merged load and weather DataFrames.
+        """
         matches = {}
         for building_id in building_ids:
             try:
@@ -124,6 +192,21 @@ class Utils():
 
 # Convert column to datetime 
     def convert_column_to_datetime(self, df, column_name):
+        """
+        Converts the given column to datetime and sets it as the index of the dataframe.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            The dataframe to modify.
+        column_name : str
+            The name of the column to convert.
+
+        Returns
+        -------
+        pd.DataFrame
+            The modified dataframe.
+        """
         try:
             df[column_name] = pd.to_datetime(df[column_name])
             df.set_index(column_name, inplace=True)
@@ -131,8 +214,44 @@ class Utils():
         except Exception as e:
             print
 
+    # Extract Values from Datetime
+    def extract_values_from_datetime(self, df, column_name):
+        try:
+            df = self.convert_column_to_datetime(df, column_name)
+
+            # Extract time-based features from the timestamp
+            df['hour'] = df[column_name].dt.hour
+            df['month'] = df[column_name].dt.month
+            df['year'] = df[column_name].dt.year
+
+            # Weekday/Weekend binary indicator (1 for weekday, 0 for weekend)
+            df['is_weekday'] = df[column_name].dt.dayofweek.apply(lambda x: 1 if x < 5 else 0)
+
+            # US Holidays binary indicator
+            us_holidays = holidays.US()  # Get a list of US holidays
+            df['is_holiday'] = df[column_name].dt.date.apply(lambda x: 1 if x in us_holidays else 0)
+
+        except Exception as e:
+            print
+
 # Weather interpolation from 1 hour to 15 minute intervals
     def w_interpolation_and_heat_index(self, weather):
+        """
+        Interpolates the given weather data to 15-minute intervals and adds a
+        calculated column for heat index.
+
+        Parameters
+        ----------
+        weather : pd.DataFrame
+            The DataFrame to interpolate and modify. Must have columns 'date_time',
+            'Dry Bulb Temperature [°C]', and 'Relative Humidity [%]'.
+
+        Returns
+        -------
+        pd.DataFrame
+            The modified DataFrame with the interpolated values and a new 'heat_index'
+            column in degrees Fahrenheit.
+        """
         weather = self.convert_column_to_datetime(weather, 'date_time')
         weather = weather.resample('15T').asfreq().interpolate(method='linear').reset_index()
 
@@ -146,7 +265,7 @@ class Utils():
 # Common Timeseries Encoding Functions
     
     # encodes 
-    def load_to_fourier():
+    def load_to_fourier():        
         print("Load to Fourier happens here")
     
 
