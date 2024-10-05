@@ -163,6 +163,8 @@ class Utils():
           # find max load and max/min temperature per hour
           final_df = self.max_min_load_temp(final_df)
           final_df.drop(columns=['timestamp', 'day', 'year'], inplace=True)
+          final_df['bldg_id'] = building_id
+          final_df.index.name = 'Index'
           return final_df
 
       except FileNotFoundError:
@@ -174,7 +176,7 @@ class Utils():
     
     # Using a list of building ids, returns the merged load and weather in
     # a list
-    def collect_w_and_l_matches(self, building_ids):
+    def save_w_and_l_matches(self, building_ids):
         """
         Using a list of building ids, returns the merged load and weather in
         a dictionary of {building_id: merged_df}.
@@ -189,15 +191,17 @@ class Utils():
         dict
             A dictionary of building ids to their merged load and weather DataFrames.
         """
-        matches = {}
         for building_id in building_ids:
             try:
                 merged_match = self.match_l_and_w_from_building_id(building_id)
                 if merged_match is not None:
-                    matches[building_id] = merged_match
+                    try:
+                        merged_match.to_csv(PATH_INTERNAL + f"/processed_weather_and_load/{building_id}.csv")
+                        print(f"Successfully saved {building_id}.csv")
+                    except Exception as e:
+                        print(f"Error saving {building_id}.csv: {e}")
             except Exception as e:
                 print(f"Error processing building_id {building_id}: {e}")
-        return matches
 # Common Categorical Encoding Functions
 
 # Convert column to datetime 
@@ -237,11 +241,11 @@ class Utils():
             df['year'] = df[column_name].dt.year
 
             # Weekday/Weekend binary indicator (1 for weekday, 0 for weekend)
-            df['is_weekday'] = df[column_name].dt.dayofweek < 5
+            df['is_weekday'] = (df[column_name].dt.dayofweek < 5).astype(int)
 
             # US Holidays binary indicator
             us_holidays = holidays.US()  # Get a list of US holidays
-            df['is_holiday'] = df[column_name].dt.date.isin(us_holidays)
+            df['is_holiday'] = (df[column_name].dt.date.isin(us_holidays)).astype(int)
 
         except Exception as e:
             print(f"Error extracting values from datetime: {e}")
