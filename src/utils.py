@@ -92,7 +92,7 @@ class Utils():
         except Exception as e:
             print(f"Failed to load metadata: {e}")
 
-    # Add the maximum load, maximum temperature, minimum temperature
+    # CURRENTLY DOESNT WORK AS EXPECTED
     def max_min_load_temp(self, df):
         """
         Adds a max load, max temp, min temp to the combined weather/load df.
@@ -105,10 +105,9 @@ class Utils():
         -------
         pd.DataFrame
         """
-        df['max_load_hourly'] = df.groupby('hour')['out.electricity.total.energy_consumption'].transform('max')
-        df['max_temp_hourly'] = df.groupby('hour')['Dry Bulb Temperature [°C]'].transform('max')
-        # df['min_load'] = df['out.electricity.total.energy_consumption'].min()
-        df['min_temp_hourly'] = df.groupby('hour')['Dry Bulb Temperature [°C]'].transform('min')
+        df['max_load_hourly'] = df.groupby(['hour', 'day', 'month', 'year'])['out.electricity.total.energy_consumption'].transform('max')
+        df['max_temp_hourly'] = df.groupby(['hour', 'day', 'month', 'year'])['Dry Bulb Temperature [°C]'].transform('max')
+        df['min_temp_hourly'] = df.groupby(['hour', 'day', 'month', 'year'])['Dry Bulb Temperature [°C]'].transform('min')
         return df
 
     # Combines the load and weather files that have the same building_id
@@ -160,9 +159,10 @@ class Utils():
                                 'Relative Humidity [%]',
                                 'heat_index']]
           # encode the datetime
-          final_df = self.extract_values_from_datetime(final_df, 'timestamp');
+          final_df = self.extract_values_from_datetime(final_df, 'timestamp')
           # find max load and max/min temperature per hour
           final_df = self.max_min_load_temp(final_df)
+          final_df.drop(columns=['timestamp', 'day', 'year'], inplace=True)
           return final_df
 
       except FileNotFoundError:
@@ -222,7 +222,7 @@ class Utils():
             df.set_index(column_name, inplace=True)
             return df
         except Exception as e:
-            print
+            print(f"Error converting column to datetime: {e}")
 
     # Extract Values from Datetime
     def extract_values_from_datetime(self, df, column_name):
@@ -232,8 +232,9 @@ class Utils():
 
             # Extract time-based features from the timestamp
             df['hour'] = df[column_name].dt.hour
+            df['day'] = df[column_name].dt.day # this is removed after the hourly rate is calculated
             df['month'] = df[column_name].dt.month
-            # df['year'] = df[column_name].dt.year
+            df['year'] = df[column_name].dt.year
 
             # Weekday/Weekend binary indicator (1 for weekday, 0 for weekend)
             df['is_weekday'] = df[column_name].dt.dayofweek < 5
@@ -241,8 +242,6 @@ class Utils():
             # US Holidays binary indicator
             us_holidays = holidays.US()  # Get a list of US holidays
             df['is_holiday'] = df[column_name].dt.date.isin(us_holidays)
-
-            df.drop(columns=[column_name], inplace=True)
 
         except Exception as e:
             print(f"Error extracting values from datetime: {e}")
@@ -268,7 +267,7 @@ class Utils():
             column in degrees Fahrenheit.
         """
         weather = self.convert_column_to_datetime(weather, 'date_time')
-        weather = weather.resample('15T').asfreq().interpolate(method='linear').reset_index()
+        weather = weather.resample('15min').asfreq().interpolate(method='linear').reset_index()
 
         weather['heat_index'] = mpcalc.heat_index(
             weather['Dry Bulb Temperature [°C]'].values * units.degC,
