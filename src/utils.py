@@ -14,6 +14,8 @@ import numpy as np
 import metpy.calc as mpcalc # For calculating heat index.
 from metpy.units import units
 
+import holidays # For US holidays
+
 """
 The Utils class holds common functions that can be used in:
 - Initalizing Google Drive
@@ -66,7 +68,7 @@ class Utils():
         existing_ids = set(map(int, os.listdir(BUILDING_DATA_PATH)))
         md_cleaned = md_uncleaned[md_uncleaned['bldg_id'].isin(existing_ids)]
         try:
-            md_cleaned.to_csv(PATH_INTERNAL + "metadata_removed_lost_l_and_w.csv")
+            md_cleaned.to_csv(PATH_INTERNAL + "/metadata_removed_lost_l_and_w.csv")
             print("Successfully saved cleaned metadata to Team-Fermata-Energy/processed_data")
         except Exception as e:
             print(f"Failed to save metadata: {e}")
@@ -84,12 +86,30 @@ class Utils():
         Returns
         -------
         pd.DataFrame
-            The cleaned metadata
         """
         try:
             return pd.read_csv(PATH_INTERNAL + "/metadata_removed_lost_l_and_w.csv")
         except Exception as e:
             print(f"Failed to load metadata: {e}")
+
+    # Add the maximum load, maximum temperature, minimum temperature
+    def max_min_load_temp(self, df):
+        """
+        Adds a max load, max temp, min temp to the combined weather/load df.
+        
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        pd.DataFrame
+        """
+        df['max_load_hourly'] = df.groupby('hour')['out.electricity.total.energy_consumption'].transform('max')
+        df['max_temp_hourly'] = df.groupby('hour')['Dry Bulb Temperature [°C]'].transform('max')
+        # df['min_load'] = df['out.electricity.total.energy_consumption'].min()
+        df['min_temp_hourly'] = df.groupby('hour')['Dry Bulb Temperature [°C]'].transform('min')
+        return df
 
     # Combines the load and weather files that have the same building_id
     def match_l_and_w_from_building_id(self, building_id):
@@ -119,16 +139,6 @@ class Utils():
           load_df = self.convert_column_to_datetime(load_df, 'timestamp').reset_index()
           # update weather to have interpolation and heat index
           weather_df = self.w_interpolation_and_heat_index(weather_df)
-          # print(weather_df.head())
-
-          # # the first few rows and the columns of each DataFrame
-          # print(f"Load DataFrame for building {building_id}:")
-          # print(load_df.head())
-          # print("Load DataFrame columns:", load_df.columns.tolist())
-
-          # print(f"Weather DataFrame for building {building_id}:")
-          # print(weather_df.head())
-          # print("Weather DataFrame columns:", weather_df.columns.tolist())
 
           # check if 'timestamp' is in the load DataFrame and rename 'date_time' in the weather DataFrame
           if 'timestamp' not in load_df.columns:
@@ -149,10 +159,10 @@ class Utils():
                                 'Dry Bulb Temperature [°C]',
                                 'Relative Humidity [%]',
                                 'heat_index']]
-
-          # print(f"---------------------------------------------------")
-          # print(f"Merged DataFrame for building {building_id}:")
-
+          # encode the datetime
+          final_df = self.extract_values_from_datetime(final_df, 'timestamp');
+          # find max load and max/min temperature per hour
+          final_df = self.max_min_load_temp(final_df)
           return final_df
 
       except FileNotFoundError:
@@ -217,22 +227,27 @@ class Utils():
     # Extract Values from Datetime
     def extract_values_from_datetime(self, df, column_name):
         try:
-            df = self.convert_column_to_datetime(df, column_name)
+            if not np.issubdtype(df[column_name].dtype, np.datetime64):
+                df[column_name] = pd.to_datetime(df[column_name])
 
             # Extract time-based features from the timestamp
             df['hour'] = df[column_name].dt.hour
             df['month'] = df[column_name].dt.month
-            df['year'] = df[column_name].dt.year
+            # df['year'] = df[column_name].dt.year
 
             # Weekday/Weekend binary indicator (1 for weekday, 0 for weekend)
-            df['is_weekday'] = df[column_name].dt.dayofweek.apply(lambda x: 1 if x < 5 else 0)
+            df['is_weekday'] = df[column_name].dt.dayofweek < 5
 
             # US Holidays binary indicator
             us_holidays = holidays.US()  # Get a list of US holidays
-            df['is_holiday'] = df[column_name].dt.date.apply(lambda x: 1 if x in us_holidays else 0)
+            df['is_holiday'] = df[column_name].dt.date.isin(us_holidays)
+
+            df.drop(columns=[column_name], inplace=True)
 
         except Exception as e:
-            print
+            print(f"Error extracting values from datetime: {e}")
+
+        return df
 
 # Weather interpolation from 1 hour to 15 minute intervals
     def w_interpolation_and_heat_index(self, weather):
@@ -258,7 +273,7 @@ class Utils():
         weather['heat_index'] = mpcalc.heat_index(
             weather['Dry Bulb Temperature [°C]'].values * units.degC,
             weather['Relative Humidity [%]'].values * units.percent
-        ).to('degF')
+        )
         
         return weather.rename(columns={"date_time":"timestamp"})
 
