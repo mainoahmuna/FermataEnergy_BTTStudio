@@ -77,7 +77,7 @@ utils = Utils()
 
 # Example synthetic data: Let's create a time-series of 100 hourly points
 df = pd.DataFrame({
-    'timestamp': pd.date_range(start='1/1/2020', periods=100, freq='H'),
+    'timestamp': pd.date_range(start='1/1/2018', periods=100, freq='H'),
     'out.electricity.total.energy_consumption': np.sin(np.linspace(0, 10 * np.pi, 100)) + np.random.normal(0, 0.5, 100)
 })
 
