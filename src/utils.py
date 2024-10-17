@@ -60,14 +60,41 @@ class Utils():
             print(f"Failed to save metadata: {e}")
 
     def load_cleaned_metadata(self):
-      try:
-        return pd.read_csv(PATH_INTERNAL + "/metadata_removed_lost_l_and_w.csv")
-      except Exception as e:
-        print(f"Failed to load metadata: {e}")
+        """
+        Loads the cleaned metadata from the "processed_data" folder within the Google Drive folder.
+        
+        The cleaned metadata is the result of removing metadata entries for buildings that don't have associated data in the "building_data" folder.
+        
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        pd.DataFrame
+        """
+        try:
+            return pd.read_csv(PATH_INTERNAL + "/metadata_removed_lost_l_and_w.csv")
+        except Exception as e:
+            print(f"Failed to load metadata: {e}")
 
-    # Add process_time_features code to do numeric encoding for time
-
-
+    # CURRENTLY DOESNT WORK AS EXPECTED
+    def max_min_load_temp(self, df):
+        """
+        Adds a max load, max temp, min temp to the combined weather/load df.
+        
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        pd.DataFrame
+        """
+        df['max_load_hourly'] = df.groupby(['hour', 'day', 'month', 'year'])['out.electricity.total.energy_consumption'].transform('max')
+        df['max_temp_hourly'] = df.groupby(['hour', 'day', 'month', 'year'])['Dry Bulb Temperature [°C]'].transform('max')
+        df['min_temp_hourly'] = df.groupby(['hour', 'day', 'month', 'year'])['Dry Bulb Temperature [°C]'].transform('min')
+        return df
 
     # Combines the load and weather files that have the same building_id
     def match_l_and_w_from_building_id(self, building_id):
@@ -114,10 +141,13 @@ class Utils():
                                 'Dry Bulb Temperature [°C]',
                                 'Relative Humidity [%]',
                                 'heat_index']]
-
-          # print(f"---------------------------------------------------")
-          # print(f"Merged DataFrame for building {building_id}:")
-
+          # encode the datetime
+          final_df = self.extract_values_from_datetime(final_df, 'timestamp')
+          # find max load and max/min temperature per hour
+          final_df = self.max_min_load_temp(final_df)
+          final_df.drop(columns=['timestamp', 'day', 'year'], inplace=True)
+          final_df['bldg_id'] = building_id
+          final_df.index.name = 'Index'
           return final_df
 
       except FileNotFoundError:
@@ -129,16 +159,32 @@ class Utils():
 
     # Using a list of building ids, returns the merged load and weather in
     # a list
-    def collect_w_and_l_matches(self, building_ids):
-        matches = {}
+    def save_w_and_l_matches(self, building_ids):
+        """
+        Using a list of building ids, returns the merged load and weather in
+        a dictionary of {building_id: merged_df}.
+
+        Parameters
+        ----------
+        building_ids : list
+            A list of building ids.
+
+        Returns
+        -------
+        dict
+            A dictionary of building ids to their merged load and weather DataFrames.
+        """
         for building_id in building_ids:
             try:
                 merged_match = self.match_l_and_w_from_building_id(building_id)
                 if merged_match is not None:
-                    matches[building_id] = merged_match
+                    try:
+                        merged_match.to_csv(PATH_INTERNAL + f"/processed_weather_and_load/{building_id}.csv")
+                        print(f"Successfully saved {building_id}.csv")
+                    except Exception as e:
+                        print(f"Error saving {building_id}.csv: {e}")
             except Exception as e:
                 print(f"Error processing building_id {building_id}: {e}")
-        return matches
 # Common Categorical Encoding Functions
 
 # Convert column to datetime
@@ -148,7 +194,31 @@ class Utils():
             df.set_index(column_name, inplace=True)
             return df
         except Exception as e:
-            print
+            print(f"Error converting column to datetime: {e}")
+
+    # Extract Values from Datetime
+    def extract_values_from_datetime(self, df, column_name):
+        try:
+            if not np.issubdtype(df[column_name].dtype, np.datetime64):
+                df[column_name] = pd.to_datetime(df[column_name])
+
+            # Extract time-based features from the timestamp
+            df['hour'] = df[column_name].dt.hour
+            df['day'] = df[column_name].dt.day # this is removed after the hourly rate is calculated
+            df['month'] = df[column_name].dt.month
+            df['year'] = df[column_name].dt.year
+
+            # Weekday/Weekend binary indicator (1 for weekday, 0 for weekend)
+            df['is_weekday'] = (df[column_name].dt.dayofweek < 5).astype(int)
+
+            # US Holidays binary indicator
+            us_holidays = holidays.US()  # Get a list of US holidays
+            df['is_holiday'] = (df[column_name].dt.date.isin(us_holidays)).astype(int)
+
+        except Exception as e:
+            print(f"Error extracting values from datetime: {e}")
+
+        return df
 
 # Weather interpolation from 1 hour to 15 minute intervals
     def w_interpolation_and_heat_index(self, weather):
